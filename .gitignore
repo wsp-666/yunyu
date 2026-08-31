@@ -1,0 +1,50 @@
+# ===== IDE =====
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+# ===== Java / Maven =====
+backend/target/
+backend/.mvn/
+backend/*.log
+*.class
+*.jar
+*.war
+
+# ===== Node / Vite =====
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.log
+*.map
+
+# ===== Uploads (runtime data) =====
+backend/uploads/
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== Claude =====
+.claude/
+skills*.json
+skills/
+
+# ===== Env & Secrets =====
+.env
+.env.local
+.env.*.local
+*.password
+
+# ===== Local docs / clutter =====
+*.docx
+.agents/
+skills-lock.json
+
+# Keep real local config out of GitHub (use application-example.yml)
+# Uncomment next line if you want application.yml never committed:
+# backend/src/main/resources/application.yml
