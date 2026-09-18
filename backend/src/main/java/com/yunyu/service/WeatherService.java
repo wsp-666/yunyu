@@ -2,6 +2,7 @@ package com.yunyu.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.yunyu.common.CacheKeys;
 import com.yunyu.vo.FishingWeatherVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -10,12 +11,16 @@ import org.springframework.web.client.RestTemplate;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 
 @Service
 public class WeatherService {
 
     @Autowired
     private DeepSeekService deepSeekService;
+
+    @Autowired
+    private RedisCacheService redisCacheService;
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -28,10 +33,15 @@ public class WeatherService {
     }
 
     public FishingWeatherVO getFishingWeather(String city) {
+        String key = CacheKeys.weather(city);
+        return redisCacheService.getOrLoad(key, Duration.ofMinutes(30), FishingWeatherVO.class,
+                () -> fetchWeather(city));
+    }
+
+    private FishingWeatherVO fetchWeather(String city) {
         FishingWeatherVO vo = new FishingWeatherVO();
         vo.setCity(city);
 
-        // 从wttr.in获取真实天气
         try {
             String encodedCity = URLEncoder.encode(city, StandardCharsets.UTF_8);
             String url = "https://wttr.in/" + encodedCity + "?format=j1";
@@ -56,7 +66,6 @@ public class WeatherService {
             vo.setPressure("--hPa");
         }
 
-        // AI钓鱼建议
         try {
             String systemPrompt = "你是一个专业的钓鱼天气分析专家。"
                     + "请根据城市的实际天气数据，给出简洁的钓鱼适宜度分析和出钓建议。"

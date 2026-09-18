@@ -37,20 +37,64 @@
 
 ```
 前端    Vue 3 + Vite + Vue Router + Axios + ECharts
-后端    Spring Boot 3.4 + MyBatis-Plus + JWT
+后端    Spring Boot 3.4 + MyBatis-Plus + JWT + Redis（缓存/锁/限流）
 数据    MySQL 8 + Redis
 可选    MinIO（对象存储） / DeepSeek API（对话）
 ```
 
-架构很直接：浏览器访问前端，接口走 `/api`，开发时由 Vite 代理到 `localhost:8080`。
+架构：浏览器访问前端，接口走 `/api`；开发时由 Vite 代理到 `localhost:8080`。多实例时各节点共享 MySQL 与 Redis。
 
 ```
 浏览器
   └─ Vue (5173)
-       └─ /api  ──proxy──▶  Spring Boot (8080)
+       └─ /api  ──proxy──▶  Spring Boot × N
                               ├─ MySQL
                               └─ Redis
 ```
+
+---
+
+## 高并发与分布式（二次开发说明）
+
+云渔后端按「**无状态应用 + 共享 Redis + MySQL**」做了水平扩展准备：  
+同一套代码可启动多个 Spring Boot 实例，会话态靠 JWT，热点数据与互斥锁都落在 Redis，避免单机内存锁在多机失效。
+
+### 架构示意
+
+```
+                ┌─────────────┐
+  用户 ──▶ Nginx ──▶ App 实例 A ──┐
+                │               ├──▶ MySQL
+                └──▶ App 实例 B ──┤
+                                  └──▶ Redis（缓存 / 锁 / 限流）
+```
+
+### 做了什么
+
+| 能力 | 实现要点 | 关键代码 |
+|------|----------|----------|
+| **读缓存** | 钓场列表/详情、钓点、商品、天气结果写入 Redis，TTL 约 2–30 分钟；写操作后按 pattern 失效 | `RedisCacheService`、`CacheKeys`、`VenueService` / `SpotService` / `WeatherService` / `ProductController` |
+| **分布式锁** | Redis `SET NX` + 租约 + Lua 安全解锁；下单、抽位、积分兑换、定时抽位任务互斥 | `DistributedLockService`、`OrderService`、`PointsService`、`SeatService` |
+| **防超卖** | 余票 / 库存用条件更新：`WHERE remain_seats > 0` / `stock > 0` 再 `SET … - 1`，与锁配合 | `OrderService`、`PointsService` |
+| **接口限流** | 按用户滑动窗口限流（如每分钟下单次数），保护写热点 | `RateLimitService` |
+| **连接池与线程** | HikariCP、Lettuce 连接池、Tomcat 线程与最大连接调优；异步线程池预留 | `application.yml`、`RedisConfig` |
+| **定时任务互斥** | 抽位调度仅一个实例执行（Redis 任务锁） | `SeatService#autoAssignSeats` |
+
+### Redis Key 约定（前缀 `yunyu:`）
+
+- `venue:list:*` / `venue:detail:{id}` — 钓场缓存  
+- `spot:*` / `product:*` / `weather:{city}` — 钓点、商品、天气  
+- `lock:session:order:{id}` / `lock:session:seat:{id}` / `lock:product:ex:{id}` — 业务锁  
+- `lock:job:autoAssignSeats` — 定时任务锁  
+- `rl:order:create:{userId}` — 限流计数  
+
+### 本地联调注意
+
+1. **必须先启动 Redis**（默认 `localhost:6379`），否则缓存/锁相关路径会报错或降级失败。  
+2. 多实例验证：起两个后端进程（如 `8080` / `8081`），共用同一 Redis 与 MySQL，并发下单观察余票是否超卖。  
+3. 配置见 `application-example.yml` 中 `spring.data.redis.lettuce.pool` 与 `hikari` 段。
+
+> 说明：当前是「进程内无状态 + Redis 协调」的轻量分布式，并非完整微服务拆分。后续若要继续演进，可加消息队列削峰、分库分表或网关层限流。
 
 ---
 
@@ -107,10 +151,13 @@ cd frontend && npm run build
 云渔/
 ├── frontend/          # Vue 前端
 │   ├── src/views/     # 页面
-│   ├── src/components/# AppHeader / PageBar 等
+│   ├── src/components/# AppHeader / PageBar / SiteFooter
 │   └── src/api/       # Axios 封装
 ├── backend/           # Spring Boot
 │   ├── src/main/java/com/yunyu/
+│   │   ├── common/    # CacheKeys 等
+│   │   ├── config/    # RedisConfig（缓存/调度/异步池）
+│   │   └── service/   # RedisCache / DistributedLock / RateLimit …
 │   └── sql/           # 建表与迁移脚本
 └── README.md
 ```
@@ -119,11 +166,11 @@ cd frontend && npm run build
 
 ## 界面方向
 
-近期前端做了一轮视觉整理：
+近期前端做了一轮网站化视觉整理：
 
-- **青绿水域**色板，替代通用蓝灰后台感
-- 首页品牌 Hero + 涟漪动效，导航分组并支持移动端折叠
-- 登录 / 注册页强化品牌侧栏与表单节奏
+- **青绿水域**色板 + 首页全宽深色 Hero
+- 功能入口条（社区 / 天气 / 识鱼 / 商城）与站点页脚
+- 导航分组并支持移动端折叠；登录 / 注册强化品牌侧栏
 - 社区、商城、AI 对话等子页统一顶栏与圆角控件语言
 
 本地 `npm run dev` 即可预览。
@@ -144,10 +191,12 @@ cd frontend && npm run build
 
 ## 路线图（可选）
 
+- [x] Redis 缓存 + 分布式锁 + 下单防超卖
 - [ ] 更多子页接入统一顶栏组件
 - [ ] 配置外置（环境变量 / profile）完善
 - [ ] 单元测试与接口文档
-- [ ] Docker Compose 一键本地依赖
+- [ ] Docker Compose 一键本地依赖（MySQL + Redis）
+- [ ] 网关 / 消息队列削峰
 
 ---
 

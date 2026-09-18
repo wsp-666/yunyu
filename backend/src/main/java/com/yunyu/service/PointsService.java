@@ -1,7 +1,9 @@
 package com.yunyu.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.yunyu.common.CacheKeys;
 import com.yunyu.dao.PointsLogDao;
 import com.yunyu.dao.ProductDao;
 import com.yunyu.dao.UserDao;
@@ -12,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -27,6 +30,12 @@ public class PointsService {
 
     @Autowired
     private ProductDao productDao;
+
+    @Autowired
+    private DistributedLockService distributedLockService;
+
+    @Autowired
+    private RedisCacheService redisCacheService;
 
     @Transactional
     public int addPoints(int userId, int points, String desc, int type, Integer refId) {
@@ -49,25 +58,41 @@ public class PointsService {
 
     @Transactional
     public boolean exchangeProduct(int userId, int productId) {
+        return distributedLockService.executeWithLock(
+                CacheKeys.lockProductExchange(productId),
+                Duration.ofSeconds(8),
+                3000,
+                () -> doExchange(userId, productId)
+        );
+    }
+
+    private boolean doExchange(int userId, int productId) {
         User user = userDao.selectById(userId);
         Product product = productDao.selectById(productId);
 
         if (user == null || product == null) {
             throw new IllegalArgumentException("用户或商品不存在");
         }
-        if (product.getStock() <= 0) {
-            throw new IllegalArgumentException("商品库存不足");
-        }
         if (user.getPoints() < product.getPointsPrice()) {
             throw new IllegalArgumentException("积分不足");
         }
 
-        user.setPoints(user.getPoints() - product.getPointsPrice());
-        userDao.updateById(user);
+        int stockUpdated = productDao.update(null, new LambdaUpdateWrapper<Product>()
+                .eq(Product::getId, productId)
+                .gt(Product::getStock, 0)
+                .setSql("stock = stock - 1, sales_count = sales_count + 1"));
+        if (stockUpdated == 0) {
+            throw new IllegalArgumentException("商品库存不足");
+        }
 
-        product.setStock(product.getStock() - 1);
-        product.setSalesCount(product.getSalesCount() + 1);
-        productDao.updateById(product);
+        int pointsUpdated = userDao.update(null, new LambdaUpdateWrapper<User>()
+                .eq(User::getId, userId)
+                .ge(User::getPoints, product.getPointsPrice())
+                .setSql("points = points - " + product.getPointsPrice()));
+        if (pointsUpdated == 0) {
+            // 回滚库存（同事务会整体回滚，这里抛错即可）
+            throw new IllegalArgumentException("积分不足");
+        }
 
         PointsLog log = new PointsLog();
         log.setUserId(userId);
@@ -76,6 +101,7 @@ public class PointsService {
         log.setRefId(productId);
         pointsLogDao.insert(log);
 
+        redisCacheService.deleteByPattern(CacheKeys.PRODUCT_PATTERN);
         return true;
     }
 
@@ -93,7 +119,6 @@ public class PointsService {
             throw new IllegalArgumentException("用户不存在");
         }
 
-        // 现金价格：1个月30元，6个月108元，12个月188元
         int price;
         switch (months) {
             case 1: price = 30; break;
@@ -102,7 +127,6 @@ public class PointsService {
             default: throw new IllegalArgumentException("不支持的会员时长");
         }
 
-        // 设置会员
         user.setMemberLevel(1);
         LocalDateTime now = LocalDateTime.now();
         if (user.getMemberExpire() != null && user.getMemberExpire().isAfter(now)) {
@@ -120,7 +144,6 @@ public class PointsService {
     }
 
     public boolean checkDailySignIn(int userId) {
-        // 检查今天是否已签到
         Long count = pointsLogDao.selectCount(new LambdaQueryWrapper<PointsLog>()
                 .eq(PointsLog::getUserId, userId)
                 .eq(PointsLog::getType, 3)

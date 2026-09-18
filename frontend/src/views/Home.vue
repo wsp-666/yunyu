@@ -3,40 +3,55 @@
     <AppHeader v-model:keyword="keyword" @search="search" />
 
     <section class="hero">
-      <div class="hero-copy">
-        <p class="eyebrow">智能钓场 · 渔获社区 · AI 助手</p>
-        <h1>云渔</h1>
-        <p class="lead">发现身边好钓场，跟竿友分享渔获，让每一次出钓更有把握。</p>
-        <div class="hero-actions">
-          <button class="yy-btn" type="button" @click="scrollToList">浏览钓场</button>
-          <router-link class="yy-btn yy-btn-ghost" to="/ai-chat">问问 AI 大师</router-link>
+      <div class="hero-bg" aria-hidden="true"></div>
+      <div class="hero-inner">
+        <div class="hero-copy">
+          <p class="eyebrow">智能钓场平台</p>
+          <h1>云渔</h1>
+          <p class="lead">发现身边好钓场，跟竿友分享渔获，让每一次出钓更有把握。</p>
+          <div class="hero-actions">
+            <button class="yy-btn" type="button" @click="scrollToList">浏览钓场</button>
+            <router-link class="yy-btn yy-btn-ghost light" to="/ai-chat">问问 AI 大师</router-link>
+          </div>
+        </div>
+        <div class="hero-visual" aria-hidden="true">
+          <div class="ripple r1"></div>
+          <div class="ripple r2"></div>
+          <div class="ripple r3"></div>
+          <div class="lake">
+            <svg viewBox="0 0 420 280" preserveAspectRatio="xMidYMid slice">
+              <defs>
+                <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#1a9aaa" />
+                  <stop offset="100%" stop-color="#0c4a56" />
+                </linearGradient>
+              </defs>
+              <rect width="420" height="280" fill="url(#water)" />
+              <path d="M0 170 Q70 140 140 165 T280 160 T420 150 V280 H0Z" fill="rgba(255,255,255,0.12)" />
+              <path d="M0 200 Q105 175 210 195 T420 185 V280 H0Z" fill="rgba(255,255,255,0.08)" />
+              <circle cx="320" cy="70" r="28" fill="#fbbf24" opacity="0.85" />
+            </svg>
+          </div>
         </div>
       </div>
-      <div class="hero-visual" aria-hidden="true">
-        <div class="ripple r1"></div>
-        <div class="ripple r2"></div>
-        <div class="ripple r3"></div>
-        <div class="lake">
-          <svg viewBox="0 0 420 280" preserveAspectRatio="xMidYMid slice">
-            <defs>
-              <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#1a9aaa" />
-                <stop offset="100%" stop-color="#0c4a56" />
-              </linearGradient>
-            </defs>
-            <rect width="420" height="280" fill="url(#water)" />
-            <path d="M0 170 Q70 140 140 165 T280 160 T420 150 V280 H0Z" fill="rgba(255,255,255,0.12)" />
-            <path d="M0 200 Q105 175 210 195 T420 185 V280 H0Z" fill="rgba(255,255,255,0.08)" />
-            <circle cx="320" cy="70" r="28" fill="#fbbf24" opacity="0.85" />
-          </svg>
-        </div>
+    </section>
+
+    <section class="feature-strip">
+      <div class="feature-inner">
+        <router-link v-for="f in features" :key="f.to" :to="f.to" class="feature-item">
+          <span class="feature-title">{{ f.title }}</span>
+          <span class="feature-desc">{{ f.desc }}</span>
+        </router-link>
       </div>
     </section>
 
     <main class="main" ref="listRef">
       <div class="section-head">
-        <h2>附近钓场</h2>
-        <p>关注放鱼动态，挑准下竿时机</p>
+        <div>
+          <h2>附近钓场</h2>
+          <p>关注放鱼动态，挑准下竿时机</p>
+        </div>
+        <router-link to="/spot-share" class="section-link">查看钓点 →</router-link>
       </div>
 
       <div v-if="venueList.length" class="venue-list">
@@ -75,6 +90,8 @@
         <button :disabled="currentPage >= totalPages" @click="changePage(currentPage + 1)">下一页</button>
       </div>
     </main>
+
+    <SiteFooter />
   </div>
 </template>
 
@@ -83,6 +100,14 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import request from '../api/index.js'
 import AppHeader from '../components/AppHeader.vue'
+import SiteFooter from '../components/SiteFooter.vue'
+
+const features = [
+  { to: '/community', title: '渔获社区', desc: '晒渔获、聊钓法' },
+  { to: '/weather', title: '出钓天气', desc: '气压风力一览' },
+  { to: '/ai/identify', title: 'AI 识鱼', desc: '拍照识别鱼种' },
+  { to: '/shop', title: '渔具商城', desc: '积分也能换' }
+]
 
 const router = useRouter()
 const venueList = ref([])
@@ -142,38 +167,55 @@ onMounted(fetchVenues)
 <style scoped>
 .home {
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .hero {
+  position: relative;
+  overflow: hidden;
+  animation: yy-fade-up 0.5s ease;
+}
+
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(900px 420px at 85% 20%, rgba(251, 191, 36, 0.18), transparent 55%),
+    linear-gradient(135deg, #0b2a32 0%, #0c4a56 45%, #127a8a 100%);
+}
+
+.hero-inner {
+  position: relative;
+  z-index: 1;
   max-width: 1240px;
   margin: 0 auto;
-  padding: 36px 20px 12px;
+  padding: 56px 20px 48px;
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;
   gap: 28px;
   align-items: center;
-  animation: yy-fade-up 0.5s ease;
 }
 
 .eyebrow {
-  color: var(--yy-primary);
+  color: #fbbf24;
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   margin-bottom: 10px;
 }
 
 .hero-copy h1 {
   font-family: var(--yy-display);
-  font-size: clamp(48px, 8vw, 72px);
-  color: var(--yy-deep);
+  font-size: clamp(52px, 9vw, 80px);
+  color: #fff;
   line-height: 1;
   margin-bottom: 14px;
 }
 
 .lead {
   max-width: 420px;
-  color: var(--yy-muted);
+  color: rgba(255, 255, 255, 0.78);
   font-size: 16px;
   line-height: 1.7;
   margin-bottom: 22px;
@@ -183,6 +225,53 @@ onMounted(fetchVenues)
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+.yy-btn-ghost.light {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.yy-btn-ghost.light:hover {
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: none;
+}
+
+.feature-strip {
+  background: rgba(255, 255, 255, 0.72);
+  border-bottom: 1px solid var(--yy-line);
+  backdrop-filter: blur(8px);
+}
+
+.feature-inner {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 12px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.feature-item {
+  padding: 22px 18px;
+  border-right: 1px solid var(--yy-line);
+  transition: background 0.2s;
+}
+
+.feature-item:last-child { border-right: none; }
+.feature-item:hover { background: rgba(18, 122, 138, 0.06); }
+
+.feature-title {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--yy-deep);
+  margin-bottom: 4px;
+}
+
+.feature-desc {
+  font-size: 12px;
+  color: var(--yy-muted);
 }
 
 .hero-visual {
@@ -203,7 +292,7 @@ onMounted(fetchVenues)
 
 .ripple {
   position: absolute;
-  border: 1px solid rgba(18, 122, 138, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 50%;
   animation: yy-ripple 3.2s ease-out infinite;
 }
@@ -214,12 +303,18 @@ onMounted(fetchVenues)
 
 .main {
   max-width: 1240px;
-  margin: 8px auto 48px;
+  margin: 8px auto 0;
   padding: 0 20px;
+  flex: 1;
+  width: 100%;
 }
 
 .section-head {
-  margin: 18px 0 20px;
+  margin: 28px 0 20px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .section-head h2 {
@@ -231,6 +326,13 @@ onMounted(fetchVenues)
 .section-head p {
   color: var(--yy-muted);
   font-size: 13px;
+}
+
+.section-link {
+  color: var(--yy-primary);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .venue-list {
@@ -356,9 +458,9 @@ onMounted(fetchVenues)
 }
 
 @media (max-width: 860px) {
-  .hero {
+  .hero-inner {
     grid-template-columns: 1fr;
-    padding-top: 24px;
+    padding: 36px 20px 40px;
   }
   .hero-visual {
     order: -1;
@@ -367,6 +469,13 @@ onMounted(fetchVenues)
   .lake {
     width: min(100%, 340px);
     transform: none;
+  }
+  .feature-inner {
+    grid-template-columns: 1fr 1fr;
+  }
+  .feature-item {
+    border-right: none;
+    border-bottom: 1px solid var(--yy-line);
   }
 }
 </style>

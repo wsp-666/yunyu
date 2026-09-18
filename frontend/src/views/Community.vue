@@ -39,6 +39,7 @@
     </div>
 
     <div v-if="postList.length === 0" class="yy-empty">暂无帖子，来发第一条吧</div>
+    <SiteFooter />
   </div>
 </template>
 
@@ -47,6 +48,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import request from '../api/index.js'
 import PageBar from '../components/PageBar.vue'
+import SiteFooter from '../components/SiteFooter.vue'
 
 const router = useRouter()
 const postList = ref([])
